@@ -1,0 +1,83 @@
+new-api Notices
+
+new-api
+Copyright (c) QuantumNous and contributors.
+
+This project is licensed under the GNU Affero General Public License v3.0.
+See LICENSE for the full project license terms.
+
+==== Additional Terms under AGPLv3 Section 7 ====
+
+Pursuant to Section 7(b) of the GNU Affero General Public License version 3,
+the following reasonable legal notice and author attribution must be preserved
+by modified versions in the Appropriate Legal Notices and in any prominent
+about, legal, footer, or attribution location presented by the user interface:
+
+"Frontend design and development by New API contributors."
+
+Modified versions that present a user interface must also preserve a visible
+link to the original project in a prominent about, legal, footer, or
+attribution location:
+
+https://github.com/QuantumNous/new-api
+
+Modified versions must not misrepresent the origin of the software and must
+mark their changes in accordance with AGPLv3 Section 7(c).
+
+==== Third-Party Notices ====
+
+This product includes third-party open source software. Copyright notices and
+license terms for direct third-party dependencies are listed in
+THIRD-PARTY-LICENSES.md.
+
+Apache-2.0 upstream NOTICE entries identified for direct dependencies are
+reproduced below. Preserve this file with Docker images, standalone binaries,
+frontend bundles, and Electron desktop installers distributed to users.
+
+==== Apache-2.0 Notices ====
+
+AWS SDK for Go
+Copyright 2015 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+Copyright 2014-2015 Stripe, Inc.
+
+smithy-go
+Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+otp
+Copyright (c) 2014, Paul Querna
+
+This product includes software developed by
+Paul Querna (http://paul.querna.org/).
+
+==== Electron / Chromium Notices ====
+
+Desktop distributions include Electron, which embeds Chromium, Node.js, V8,
+and other third-party components. Electron and Chromium third-party license
+notices must remain available with desktop installers and installed apps.
+
+==== End of Notices ====
+
+==== Modifications by new-api-sub ====
+
+This directory (web/ui) is a modified version of the new-api frontend
+(https://github.com/QuantumNous/new-api, directory web/, commit ba5f736),
+copied on 2026-11-04 and licensed under the GNU Affero General Public
+License v3.0 (see LICENSE). It is not the original new-api product and is
+not endorsed by QuantumNous; it uses its own name and logo.
+
+Summary of changes (AGPLv3 Section 7(c)):
+- Built as two applications from one code base: the supplier portal
+  ("小蓝号池") and its admin console ("小蓝号池管理后台"), selected with
+  APP=portal|admin; per-app entries, routes and menus live in src/apps/.
+- Removed features unrelated to these applications (chat, playground,
+  wallet, pricing, subscriptions, system settings, setup, OAuth/passkey/2FA
+  sign-in, notifications, update checks) and all languages except
+  Simplified Chinese and English.
+- Replaced token-based authentication with the cookie session of the
+  new-api-sub backend (/api/auth/*, /api/me).
+- Replaced the logo and favicon.
+- Added new pages and shared components for the portal and admin features.
+
+Modified source files carry a "Modified 2026-11-04 by new-api-sub" line
+after the original copyright header; new files carry a
+"Copyright (C) 2026 new-api-sub contributors" header.

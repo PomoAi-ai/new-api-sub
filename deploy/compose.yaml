@@ -1,0 +1,136 @@
+# Fill deploy/.env from .env.example, then: docker compose -f deploy/compose.yaml up -d
+# Saving a pool in the admin makes both apps exit 0; restart: unless-stopped brings them back.
+# A super who lost every second factor: docker compose -f deploy/compose.yaml run --rm admin reset-2fa <username>
+name: new-api-sub
+
+x-app: &app
+  restart: unless-stopped
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  depends_on:
+    appdb:
+      condition: service_healthy
+  networks: [edge, data, newapi]
+  logging: &logging
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "5"
+
+x-app-env: &app-env
+  APP_DB_DSN: postgres://app:${APP_DB_PASSWORD:?required}@appdb:5432/app?sslmode=disable
+  # Encrypts TOTP secrets, the pools' connections and the submitted channel keys in appdb. Keep it apart from appdb's backups.
+  APP_MASTER_KEY: ${APP_MASTER_KEY:?required}
+  # The logs synced from pools; no depends_on: the sites start without it, only synced logs go missing.
+  MONGO_URI: mongodb://app:${MONGO_PASSWORD:?required}@mongo:27017/?authSource=admin
+  MONGO_DB: newapisub
+  # Read only while appdb never held a pool, then imported once as pool 1; the admin's settings page owns it after that.
+  NEWAPI_BASE_URL: ${NEWAPI_BASE_URL:-}
+  NEWAPI_PAT: ${NEWAPI_PAT:-}
+  NEWAPI_DB_DSN: ${NEWAPI_DB_DSN:-}
+  NEWAPI_LOG_DB_DSN: ${NEWAPI_LOG_DB_DSN:-}
+  NEWAPI_KEY_DB_DSN: ${NEWAPI_KEY_DB_DSN:-}
+  COOKIE_SECURE: "true"
+  # Only the entry reaches the apps over edge, and it overwrites X-Forwarded-For.
+  TRUSTED_PROXIES: ${EDGE_SUBNET:?required}
+
+services:
+  entry:
+    image: nginxinc/nginx-unprivileged:1.29-alpine@sha256:0c79d56aee561a1d81c63f00eee5fb5fe29279560cdc55e91425133104c7fbe6
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp]
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - ${ENTRY_BIND:?required}:8080
+    networks: [edge]
+    logging: *logging
+
+  portal:
+    <<: *app
+    image: ${PORTAL_IMAGE:?required}
+    environment:
+      <<: *app-env
+      PORTAL_SESSION_SECRET: ${PORTAL_SESSION_SECRET:?required}
+      PORTAL_PUBLIC_ORIGIN: ${PORTAL_PUBLIC_ORIGIN:?required}
+    healthcheck:
+      test: [CMD, wget, -q, --spider, "http://127.0.0.1:8081/"]
+      interval: 20s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  admin:
+    <<: *app
+    image: ${ADMIN_IMAGE:?required}
+    environment:
+      <<: *app-env
+      ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:?required}
+      ADMIN_PUBLIC_ORIGIN: ${ADMIN_PUBLIC_ORIGIN:?required}
+    healthcheck:
+      test: [CMD, wget, -q, --spider, "http://127.0.0.1:8082/"]
+      interval: 20s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  appdb:
+    image: postgres:17-alpine@sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${APP_DB_PASSWORD:?required}
+      POSTGRES_DB: app
+    volumes:
+      - appdb:/var/lib/postgresql/data
+    networks: [data]
+    healthcheck:
+      test: [CMD, pg_isready, -U, app, -d, app]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: *logging
+
+  mongo:
+    image: mongo:8.0@sha256:b9924c330a8bbc5800fe9c69f04a84e221eca7b28fd049a0354147d9908fa142
+    restart: unless-stopped
+    # The image's mongodb user, which owns its /data/db and so a new volume: the entrypoint skips its root step and needs no capability.
+    user: "999:999"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    command: [--wiredTigerCacheSizeGB, "0.5"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: app
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?required}
+    volumes:
+      - mongodata:/data/db
+    networks: [data]
+    healthcheck:
+      test: [CMD, mongosh, --quiet, --eval, "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 10
+    logging: *logging
+
+networks:
+  edge:
+    ipam:
+      config:
+        - subnet: ${EDGE_SUBNET:?required}
+  data:
+    internal: true
+  # new-api's own network, so its database needs no published port.
+  newapi:
+    external: true
+    name: ${NEWAPI_NETWORK:?required}
+
+volumes:
+  appdb:
+  # A cache of the synced logs, 30 days at most: lost, a pool's sync is reset and reads new-api again.
+  mongodata:

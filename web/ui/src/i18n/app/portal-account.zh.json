@@ -1,0 +1,5 @@
+{
+  "Password must be 8–72 bytes.": "密码长度须为 8–72 字节。",
+  "Use 8–72 bytes.": "长度 8–72 字节。",
+  "Failed to change password": "修改密码失败"
+}

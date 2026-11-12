@@ -1,0 +1,64 @@
+# Pushing a tag like v1.2.3 builds both images, pushes them to ghcr.io and creates the GitHub release.
+# No tests here: they run by hand on a dev machine or in pre-release.
+name: release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+  packages: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.26.10
+      - name: Build the frontends
+        working-directory: web/ui
+        run: |
+          bun install --frozen-lockfile
+          bun run typecheck
+          bun run build:portal
+          bun run build:admin
+      - name: Build the binaries
+        env:
+          CGO_ENABLED: '0'
+          GOOS: linux
+          GOARCH: amd64
+        run: |
+          test -z "$(gofmt -l cmd internal web)"
+          go mod verify
+          go vet ./...
+          go build -trimpath -ldflags='-s -w' -o build/portal ./cmd/portal
+          go build -trimpath -ldflags='-s -w' -o build/admin ./cmd/admin
+      - name: Push the images
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          {
+            echo 'Images (put both lines into `deploy/.env`):'
+            echo '```'
+          } > notes.md
+          for app in portal admin; do
+            docker build --build-arg "APP=$app" \
+              --build-arg "OCI_SOURCE=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" --build-arg "OCI_REVISION=$GITHUB_SHA" \
+              -t "$image/$app:$TAG" -t "$image/$app:latest" .
+            docker push --all-tags "$image/$app"
+            digest="$(docker inspect --format '{{index .RepoDigests 0}}' "$image/$app:$TAG")"
+            echo "$(printf '%s' "$app" | tr a-z A-Z)_IMAGE=$digest" >> notes.md
+          done
+          echo '```' >> notes.md
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$TAG" --verify-tag --title "$TAG" --notes-file notes.md --generate-notes

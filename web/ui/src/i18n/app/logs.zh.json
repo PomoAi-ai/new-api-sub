@@ -1,0 +1,16 @@
+{
+  "All Channels": "全部渠道",
+  "All Users": "全部用户",
+  "No channel found.": "未找到渠道。",
+  "No user found.": "未找到用户。",
+  "{{count}} channels": "{{count}} 个渠道",
+  "Please select a time range": "请选择时间范围",
+  "Time range cannot exceed 92 days": "时间跨度不能超过 92 天",
+  "Concurrency": "并发",
+  "Most requests in flight at once in the last 60 seconds": "最近 60 秒内同时处理的请求数峰值",
+  "Pool": "号池",
+  "All Pools": "全部号池",
+  "Some pools are unavailable. The figures may be incomplete.": "部分号池暂时不可用，数据可能不完整。",
+  "Synced pools keep only the last 30 days of logs; nothing before {{since}} is included: {{pools}}": "以下号池通过同步读取日志，只保留最近 30 天，不包含 {{since}} 之前的数据：{{pools}}",
+  "RPM, TPM and concurrency leave out pools that sync their logs, which are minutes behind": "RPM、TPM 和并发不含同步日志的号池（有分钟级延迟）"
+}

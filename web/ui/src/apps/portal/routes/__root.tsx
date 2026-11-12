@@ -1,0 +1,62 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+// Modified 2026-11-04 by new-api-sub: no setup check, legacy routes, affiliate code or cross-tab session events
+import { type QueryClient } from '@tanstack/react-query'
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+import { createRootRouteWithContext, Outlet } from '@tanstack/react-router'
+import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
+
+import { NavigationProgress } from '@/components/navigation-progress'
+import { Toaster } from '@/components/ui/sonner'
+import { ThemeCustomizationProvider } from '@/context/theme-customization-provider'
+import { GeneralError } from '@/features/errors/general-error'
+import { NotFoundError } from '@/features/errors/not-found-error'
+import { useSystemConfig } from '@/hooks/use-system-config'
+import { bootstrapAuthentication } from '@/lib/auth-session'
+
+function RootComponent() {
+  // Load system configuration (logo, system name, etc.)
+  useSystemConfig({ autoLoad: true })
+
+  return (
+    <ThemeCustomizationProvider>
+      <NavigationProgress />
+      <Outlet />
+      <Toaster closeButton duration={5000} position='top-center' richColors />
+      {import.meta.env.MODE === 'development' && (
+        <>
+          <ReactQueryDevtools buttonPosition='bottom-left' />
+          <TanStackRouterDevtools position='bottom-right' />
+        </>
+      )}
+    </ThemeCustomizationProvider>
+  )
+}
+
+export const Route = createRootRouteWithContext<{
+  queryClient: QueryClient
+}>()({
+  // 应用初始化与路由解析前统一校验会话
+  beforeLoad: async () => {
+    await bootstrapAuthentication()
+  },
+  component: RootComponent,
+  notFoundComponent: NotFoundError,
+  errorComponent: GeneralError,
+})

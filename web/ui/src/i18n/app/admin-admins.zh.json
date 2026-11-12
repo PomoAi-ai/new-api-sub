@@ -1,0 +1,21 @@
+{
+  "Account changed successfully": "账号已修改",
+  "Add Admin": "添加管理员",
+  "Add a new admin by providing necessary info.": "通过提供必要信息来添加新管理员。",
+  "Admin created successfully": "管理员创建成功",
+  "Admin deleted successfully": "管理员删除成功",
+  "Admin disabled successfully": "管理员禁用成功",
+  "Admin enabled successfully": "管理员启用成功",
+  "Admins": "管理员",
+  "Change Account": "修改账号",
+  "Failed to change account": "修改账号失败",
+  "Failed to create admin": "创建管理员失败",
+  "Failed to delete admin": "删除管理员失败",
+  "Failed to disable admin": "禁用管理员失败",
+  "Failed to enable admin": "启用管理员失败",
+  "No Admins Found": "未找到管理员",
+  "No admins available. Try adjusting your search or filters.": "没有可用的管理员。请尝试调整您的搜索或筛选条件。",
+  "Sign in with the new username from now on.": "修改后请用新用户名登录。",
+  "Sub-user Count": "子用户数",
+  "This will permanently delete admin": "这将永久删除管理员"
+}

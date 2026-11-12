@@ -1,0 +1,62 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+// Modified 2026-11-04 by new-api-sub: role comes from the route as a prop; no retry badge
+import { useTranslation } from 'react-i18next'
+
+import { SectionPageLayout } from '@/components/layout'
+import { useAuthStore } from '@/stores/auth-store'
+
+import { ChannelsDialogs } from './components/channels-dialogs'
+import { ChannelsPrimaryButtons } from './components/channels-primary-buttons'
+import { ChannelsProvider } from './components/channels-provider'
+import { ChannelsTable } from './components/channels-table'
+import type { ChannelsMode } from './types'
+
+export function Channels(props: { mode: ChannelsMode }) {
+  const { t } = useTranslation()
+
+  return (
+    <ChannelsProvider mode={props.mode}>
+      <SectionPageLayout fixedContent>
+        <SectionPageLayout.Title>
+          <span className='flex min-w-0 items-center gap-2'>
+            <span className='truncate'>{t('Channels')}</span>
+          </span>
+        </SectionPageLayout.Title>
+        <SectionPageLayout.Actions>
+          <ChannelsPrimaryButtons />
+        </SectionPageLayout.Actions>
+        <SectionPageLayout.Content>
+          <ChannelsTable />
+        </SectionPageLayout.Content>
+      </SectionPageLayout>
+
+      <ChannelsDialogs />
+    </ChannelsProvider>
+  )
+}
+
+/** Admin app entry: the role from GET /api/me decides whether fields are locked. */
+export function AdminChannels() {
+  const user = useAuthStore((state) => state.auth.user)
+  // Signing out clears the session before the redirect leaves this page.
+  if (!user) return null
+  if (!user.role) throw new Error('GET /api/me returned no role')
+  return <Channels mode={user.role} />
+}

@@ -1,0 +1,39 @@
+/*
+Copyright (C) 2026 new-api-sub contributors
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+*/
+import { api } from '@/lib/api'
+
+export type Settlement = {
+  id: number
+  amount_usd: number
+  note: string
+  /** Admin app only; the portal does not say who recorded it. */
+  created_by?: string
+  created_at: number
+}
+
+export type SettlementOverview = {
+  used_usd: number
+  settled_usd: number
+  /** Can be negative when more was settled than has run. */
+  pending_usd: number
+  items: Settlement[]
+}
+
+/** Portal: the signed-in user's own. */
+export async function getOwnSettlements(): Promise<SettlementOverview> {
+  return (await api.get<SettlementOverview>('/api/settlements')).data
+}

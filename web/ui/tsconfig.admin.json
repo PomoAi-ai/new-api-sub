@@ -1,0 +1,25 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"],
+      "@app/*": ["./src/apps/admin/*"]
+    }
+  },
+  "files": [],
+  "include": [
+    "src/*.d.ts",
+    "src/assets",
+    "src/components",
+    "src/config",
+    "src/context",
+    "src/features",
+    "src/hooks",
+    "src/i18n",
+    "src/lib",
+    "src/stores",
+    "src/apps/admin",
+    "rsbuild.config.ts"
+  ],
+  "references": []
+}

@@ -1,0 +1,3 @@
+# Fake keys in tests of f6fb732; later marked inline with gitleaks:allow.
+f6fb732f7f57e2db4f84af5f50d11c919aca962a:internal/newapi/client_test.go:generic-api-key:249
+f6fb732f7f57e2db4f84af5f50d11c919aca962a:internal/keyprobe/keyprobe_test.go:generic-api-key:32

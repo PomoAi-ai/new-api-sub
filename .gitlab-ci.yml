@@ -1,0 +1,145 @@
+# No tests here: they run by hand on a dev machine or in pre-release.
+workflow:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - when: never
+stages: [build, security, publish, registry]
+default:
+  tags: [docker]
+  interruptible: true
+web_build:
+  stage: build
+  image: oven/bun:1.4.4@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d
+  script:
+    - cd web/ui
+    - bun install --frozen-lockfile
+    - bun run typecheck
+    - bun run build:portal
+    - bun run build:admin
+  artifacts:
+    expire_in: 7 days
+    paths: [web/portal/dist/, web/admin/dist/]
+
+binary_build:
+  stage: build
+  image: golang:1.26.10-alpine@sha256:9ce231b28998b32e116927c61aa5c406183061d4f3f2d61b292c88e7f6bdf7ca
+  needs: [web_build]
+  variables:
+    CGO_ENABLED: "0"
+    GOOS: linux
+    GOARCH: amd64
+  script:
+    - test -z "$(gofmt -l cmd internal web)"
+    - go mod verify
+    - go vet ./...
+    - go build -trimpath -ldflags='-s -w' -o build/portal ./cmd/portal
+    - go build -trimpath -ldflags='-s -w' -o build/admin ./cmd/admin
+  artifacts:
+    expire_in: 7 days
+    paths: [build/]
+
+secret_scan:
+  stage: security
+  image:
+    name: zricethezav/gitleaks:v8.28.0
+    entrypoint: [""]
+  needs: []
+  variables:
+    GIT_DEPTH: "0"
+  script:
+    - gitleaks git --no-banner --redact=100 --exit-code=1 --log-opts="$CI_COMMIT_SHA" .
+
+dependency_scan:
+  stage: security
+  image: golang:1.26.10-alpine@sha256:9ce231b28998b32e116927c61aa5c406183061d4f3f2d61b292c88e7f6bdf7ca
+  needs: [web_build]
+  variables:
+    CGO_ENABLED: "0"
+  script:
+    - go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+    - /go/bin/govulncheck ./...
+
+deployment_contract:
+  stage: security
+  image: docker:24-cli
+  needs: []
+  before_script:
+    - apk add --no-cache jq
+  script:
+    - |
+      set -eu
+      # Every variable the compose file requires must be listed in the example.
+      sed 's/=$/=x/' deploy/.env.example > /tmp/ci.env
+      docker compose --env-file /tmp/ci.env -f deploy/compose.yaml config --format json > /tmp/compose.json
+      # Only the entry is reachable from outside; both apps run read-only as non-root.
+      jq -e '[.services | to_entries[] | select(.value.ports) | .key] == ["entry"]' /tmp/compose.json
+      jq -e '[.services.portal, .services.admin, .services.entry] | all(.read_only == true and .cap_drop == ["ALL"])' /tmp/compose.json
+      jq -e '.networks.data.internal == true' /tmp/compose.json
+      # Saving a pool restarts the apps by exiting: only the restart policy brings them back.
+      jq -e '[.services.portal, .services.admin] | all(.restart == "unless-stopped" and (.environment.APP_MASTER_KEY | length > 0))' /tmp/compose.json
+      jq -e '(.services.portal.environment.PORTAL_PUBLIC_ORIGIN | length > 0) and (.services.admin.environment.ADMIN_PUBLIC_ORIGIN | length > 0)' /tmp/compose.json
+      # MongoDB holds the synced logs: pinned, on the internal network only, and never a start dependency of the apps.
+      jq -e '(.services.mongo.networks | keys) == ["data"]' /tmp/compose.json
+      jq -e '.services.mongo.image | test("@sha256:[0-9a-f]{64}$")' /tmp/compose.json
+      jq -e '[.services.portal, .services.admin] | all((.environment.MONGO_URI | length > 0) and ((.depends_on // {}) | has("mongo") | not))' /tmp/compose.json
+      # The pools are in the database: the file must work without the NEWAPI_* that only seed pool 1.
+      grep -Ev '^NEWAPI_(BASE_URL|PAT|DB_DSN|LOG_DB_DSN|KEY_DB_DSN)=' /tmp/ci.env > /tmp/ci-noimport.env
+      docker compose --env-file /tmp/ci-noimport.env -f deploy/compose.yaml config --quiet
+
+container_publish:
+  stage: publish
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: [""]
+  interruptible: false
+  needs:
+    - job: binary_build
+      artifacts: true
+    - job: secret_scan
+      artifacts: false
+    - job: dependency_scan
+      artifacts: false
+    - job: deployment_contract
+      artifacts: false
+  parallel:
+    matrix:
+      - APP: [portal, admin]
+  script:
+    - |
+      set -eu
+      mkdir -p /kaniko/.docker
+      registry_auth="$(printf '%s:%s' "$CI_REGISTRY_USER" "$CI_REGISTRY_PASSWORD" | base64 | tr -d '\n')"
+      printf '{"auths":{"%s":{"auth":"%s"}}}\n' "$CI_REGISTRY" "$registry_auth" > /kaniko/.docker/config.json
+      unset registry_auth
+      /kaniko/executor --context "$CI_PROJECT_DIR" --dockerfile "$CI_PROJECT_DIR/Dockerfile" \
+        --custom-platform=linux/amd64 --build-arg "APP=$APP" \
+        --build-arg "OCI_SOURCE=$CI_PROJECT_URL" --build-arg "OCI_REVISION=$CI_COMMIT_SHA" \
+        --destination "$CI_REGISTRY_IMAGE/$APP:$CI_COMMIT_SHA" --cache=false
+  after_script:
+    - rm -f /kaniko/.docker/config.json
+
+registry_verify:
+  stage: registry
+  image: alpine:3.22
+  needs: [container_publish]
+  before_script:
+    - apk add --no-cache skopeo jq
+  script:
+    - |
+      set -eu
+      printf '%s' "$CI_REGISTRY_PASSWORD" | skopeo login --username "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+      : > release.env
+      for app in portal admin; do
+        ref="$CI_REGISTRY_IMAGE/$app:$CI_COMMIT_SHA"
+        skopeo inspect "docker://$ref" > "$app-inspect.json"
+        skopeo inspect --config --raw "docker://$ref" > "$app-config.json"
+        jq -e --arg sha "$CI_COMMIT_SHA" '.Architecture == "amd64" and .Os == "linux" and .Labels["org.opencontainers.image.revision"] == $sha' "$app-inspect.json"
+        jq -e '.config.User == "10001:10001" and .config.Entrypoint == ["/app/server"]' "$app-config.json"
+        name="$(printf '%s' "$app" | tr a-z A-Z)_IMAGE"
+        echo "$name=$CI_REGISTRY_IMAGE/$app@$(jq -r .Digest "$app-inspect.json")" >> release.env
+      done
+  after_script:
+    - skopeo logout "$CI_REGISTRY" >/dev/null 2>&1 || true
+  artifacts:
+    expire_in: 90 days
+    paths: [release.env, portal-inspect.json, portal-config.json, admin-inspect.json, admin-config.json]
